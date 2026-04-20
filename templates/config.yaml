@@ -1,0 +1,69 @@
+# Pareto Focus configuration
+# Copy to ~/.claude/projects/pareto-focus/config.yaml on first run.
+
+projects_root: "~/Projects"
+
+# Who you are — filters 'drive resolution' suggestions to YOUR own PRs, not your teammates'.
+# Leave blank to disable the filter.
+user:
+  github_handle: ""            # e.g. "octocat"
+  emails: []                   # e.g. ["you@work.com"]
+
+
+# Active repos — the ones you actually work on day to day.
+# Auto-discovery: any repo accumulating >1h/week in time_log will be flagged for inclusion.
+active_repos:
+  - name: example-repo-1
+    path: example-repo-1
+    github: ""             # owner/repo for gh CLI ingestion, or leave blank
+    topics: ["keyword1", "keyword2", "keyword3"]
+  - name: example-repo-2
+    path: example-repo-2
+    github: ""
+    topics: ["keyword1", "keyword2"]
+
+
+# Industry signal queries (daily exa-search)
+industry_topics:
+  papers:
+    - "your research area query 1"
+    - "your research area query 2"
+  blogs:
+    - "your engineering focus area"
+  x_handles: []               # e.g. ["karpathy", "_jasonwei"]
+  linkedin_companies: []      # e.g. ["anthropic", "openai"]
+  linkedin_people: []
+
+
+# Optional: papers folder for "read" timestamps
+papers_folder: ""            # e.g. "~/Zotero/storage" — leave empty to disable
+
+# Cadence toggles — all OFF by default. Flip individually as you discover what's useful.
+cadences:
+  morning_brief:    { enabled: false, time: "07:00" }
+  end_of_day:       { enabled: false }
+  weekly_review:    { enabled: false, day: "fri", time: "16:00" }
+  monthly_review:   { enabled: false, day: "last", time: "16:00" }
+
+# Time-tracking
+time_tracking:
+  enabled: true              # PostToolUse hook is the only mode in v1
+  session_gap_minutes: 15    # >15min inactivity starts a new session
+  ignore_paths:              # don't log these as "real work"
+    - "/tmp"
+    - "~/.claude"
+
+# Scoring weights (also stored in state/weights.json — this is the seed)
+weights:
+  exec:
+    strategic_fit:        0.30
+    execution_leverage:   0.25
+    urgency:              0.20
+    recency_decay_days:   14    # half-life
+    effort_penalty:       1.0
+  lead:
+    visibility:           0.25
+    novelty:              0.25
+    team_fit:             0.20
+    aspiration_match:     0.20
+    feasibility:          0.10

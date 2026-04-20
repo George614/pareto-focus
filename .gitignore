@@ -1,0 +1,16 @@
+# runtime state — lives at ~/.claude/projects/pareto-focus/, never in repo
+state/
+data/
+*.log
+*.jsonl
+
+# OS/editor noise
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# accidental user-data artifacts
+**/goals.md.bak
+**/expertise.md.bak
+**/teammates.md.bak
