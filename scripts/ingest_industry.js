@@ -292,11 +292,25 @@ async function fetchPapersDirect(topics) {
   let reachable = false;
   let anyNetworkError = false;
 
+  // Scope arxiv queries to AI/ML categories. Without this, a query like
+  // "agentic RL training" matches 3D vision papers ("3D Policy Learning"),
+  // fashion try-on, etc. The user works in NLP/RL/ML — we only want papers
+  // from those categories.
+  // arxiv categories used:
+  //   cs.LG  — Machine Learning
+  //   cs.CL  — Computation and Language (NLP)
+  //   cs.AI  — Artificial Intelligence
+  //   cs.NE  — Neural and Evolutionary Computing
+  //   stat.ML — Statistics: Machine Learning
+  const ML_CATEGORIES = '(cat:cs.LG+OR+cat:cs.CL+OR+cat:cs.AI+OR+cat:cs.NE+OR+cat:stat.ML)';
+
   for (let i = 0; i < topics.length; i += 1) {
     const topic = topics[i];
     const q = encodeURIComponent(topic);
+    // arxiv expects '+AND+' as a literal operator (not URL-encoded inside the
+    // query expression), so we concatenate the pre-encoded category clause.
     const url =
-      `https://export.arxiv.org/api/query?search_query=all:${q}` +
+      `https://export.arxiv.org/api/query?search_query=${ML_CATEGORIES}+AND+all:${q}` +
       `&sortBy=submittedDate&sortOrder=descending&max_results=${ARXIV_MAX_RESULTS}`;
     try {
       const xml = await httpGet(url, ARXIV_TIMEOUT_MS);
