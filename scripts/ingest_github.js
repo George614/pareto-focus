@@ -114,9 +114,11 @@ function loadConfig() {
     if (py.ok) {
       try {
         const parsed = JSON.parse(py.stdout);
+        const userEmails = Array.isArray(parsed?.user?.emails) ? parsed.user.emails : [];
         return {
           projects_root: parsed.projects_root || path.join(HOME, 'Projects'),
           active_repos: Array.isArray(parsed.active_repos) ? parsed.active_repos : [],
+          user_emails: userEmails,
           _source: configPath,
         };
       } catch (_) {
@@ -153,7 +155,18 @@ function loadConfig() {
     }
   }
 
-  return { projects_root: projectsRoot, active_repos: repos, _source: configPath };
+  // Regex fallback: extract user.emails as a YAML inline-list string.
+  const emailsLine = (raw.match(/^\s*emails:\s*\[([^\]]*)\]/m) || [])[1] || '';
+  const userEmails = emailsLine
+    ? emailsLine.split(',').map((s) => s.replace(/["']/g, '').trim()).filter(Boolean)
+    : [];
+
+  return {
+    projects_root: projectsRoot,
+    active_repos: repos,
+    user_emails: userEmails,
+    _source: configPath,
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -173,7 +186,7 @@ function parseCommitLine(line) {
   };
 }
 
-function collectLocalCommits(repoDir) {
+function collectLocalCommits(repoDir, userEmails = []) {
   const errors = [];
   let recent_commits = [];
   let commits_last_24h = 0;
@@ -181,7 +194,7 @@ function collectLocalCommits(repoDir) {
 
   const res7d = runCmd(
     'git',
-    ['-C', repoDir, 'log', '--since=7 days ago', '--pretty=format:%h|%ae|%an|%s', '--no-merges'],
+    ['-C', repoDir, 'log', '--all', '--since=7 days ago', '--pretty=format:%h|%ae|%an|%s', '--no-merges'],
     {},
   );
   if (res7d.ok) {
@@ -198,7 +211,7 @@ function collectLocalCommits(repoDir) {
 
   const res24h = runCmd(
     'git',
-    ['-C', repoDir, 'log', '--since=1 day ago', '--pretty=format:%h'],
+    ['-C', repoDir, 'log', '--all', '--since=1 day ago', '--pretty=format:%h'],
     {},
   );
   if (res24h.ok) {
@@ -207,7 +220,25 @@ function collectLocalCommits(repoDir) {
     errors.push(`git log 24h: ${res24h.error}`);
   }
 
-  return { recent_commits, commits_last_24h, commits_last_7d, errors };
+  // User-only filter: per SKILL.md Quality Bar, "Do" items must reflect what the
+  // user actually does, not whole-repo activity. We filter recent_commits by the
+  // user's configured emails so downstream signals (active-repo nudges, drift
+  // analysis) attribute work correctly. `--all` above ensures we see commits on
+  // feature branches the user works on, not just the default branch.
+  const emailSet = new Set((userEmails || []).map((e) => String(e).trim().toLowerCase()).filter(Boolean));
+  const recent_commits_by_user = emailSet.size === 0
+    ? []
+    : recent_commits.filter((c) => c && c.author_email && emailSet.has(String(c.author_email).toLowerCase()));
+  const commits_last_7d_by_user = recent_commits_by_user.length;
+
+  return {
+    recent_commits,
+    commits_last_24h,
+    commits_last_7d,
+    recent_commits_by_user,
+    commits_last_7d_by_user,
+    errors,
+  };
 }
 
 /**
@@ -487,12 +518,14 @@ function processRepo(repoDef, projectsRoot, ghState) {
   }
 
   // Local git
-  const commits = collectLocalCommits(repoDir);
+  const commits = collectLocalCommits(repoDir, repoDef._user_emails || []);
   entry.errors.push(...commits.errors);
   entry.local = {
     recent_commits: commits.recent_commits,
     commits_last_24h: commits.commits_last_24h,
     commits_last_7d: commits.commits_last_7d,
+    recent_commits_by_user: commits.recent_commits_by_user,
+    commits_last_7d_by_user: commits.commits_last_7d_by_user,
   };
 
   // Gaps (local)
@@ -635,6 +668,9 @@ function main() {
 
   for (const repoDef of cfg.active_repos) {
     try {
+      // Inject user emails so processRepo → collectLocalCommits can filter
+      // commits to only the user's work (not whole-repo activity).
+      repoDef._user_emails = cfg.user_emails || [];
       repos[repoDef.name] = processRepo(repoDef, cfg.projects_root, ghState);
     } catch (err) {
       repos[repoDef.name] = {

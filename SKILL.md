@@ -84,6 +84,14 @@ Every recommendation must clear these bars before being shown to the user. Trivi
 - "Share paper X in team channel" with no concrete scope — that's a slack message, not a project.
 - "Apply paper X to repo Y" when the paper topic does not actually overlap repo topics (e.g. 3D vision papers → long-context training repo). Require real keyword overlap, not freshness × name match.
 - Stale TODO cleanup (single-line resolutions). They're noise.
+- "Ship in-flight work — N commits in last 7 days" or any whole-repo activity rollup. The N counts everyone's commits on every branch — the user may have authored zero of them. Continuation framing is vague chore-tier; not a deliverable.
+- "Ship existing feature" / "Land feature X" without naming a specific PR/branch the user authored. Generic shipping is not actionable.
+
+**Role fidelity (the user is a researcher, not a generic shipper):**
+The user works on RL post-training, evals, and Writer Agent integration. Their hands-on work in any repo is typically scoped to **one feature branch** and a small set of commits — NOT the repo's main-branch activity. Surface signals that reflect what THE USER actually does:
+- Use `local.recent_commits_by_user` and `local.commits_last_7d_by_user` (filtered by `cfg.user.emails`), NEVER raw `commits_last_7d`.
+- Prefer PRs/issues authored by the user over repo-wide rollups.
+- A Do item must reference a specific PR, issue, or branch the user owns. If no such signal exists, surface that gap honestly (e.g. "no recent user-authored PRs in repo X this week") rather than substituting whole-repo noise.
 
 **The Propose lane (5 items) MUST be a mix:**
 - 2–3 **ambitious** items: new project pitches that combine the user's expertise + a real signal + multiple repos / a cross-cutting capability. They should produce a visible artifact (RFC, eval harness, new training recipe, internal demo) over 4–8 weeks.

@@ -426,14 +426,25 @@ function sourcePaperXRepo({ papers, repos, github, teammates, aspirations }) {
   if (!papers || !Array.isArray(papers.papers)) return candidates;
   if (!repos || repos.length === 0) return candidates;
 
+  // Minimum Jaccard overlap between paper TITLE tokens and repo TOPIC tokens.
+  // Per SKILL.md Quality Bar: "Apply paper X to repo Y" must require real keyword
+  // overlap, not freshness × name match. We deliberately exclude paper.topic_matched
+  // (the user's query that surfaced the paper) — including it is tautological since
+  // the query already matched the paper's domain.
+  const PAPER_REPO_MIN_JACCARD = 0.10;
+
   for (const paper of papers.papers) {
+    const titleTokens = tokenSet([paper.title || '']);
+    if (titleTokens.size === 0) continue;
+    // Keep topic_matched in the candidate keyword bag for downstream collaborator
+    // matching and aspiration scoring, but NOT for the relevance gate.
     const paperTopicSet = tokenSet([paper.topic_matched || '', paper.title || '']);
-    if (paperTopicSet.size === 0) continue;
 
     for (const repo of repos) {
       const repoTopicSet = tokenSet(repo.topics || []);
       if (repoTopicSet.size === 0) continue;
-      if (!anyTokenOverlap(paperTopicSet, repoTopicSet)) continue;
+      // Real-relevance gate: paper title must materially overlap with repo topics.
+      if (jaccard(titleTokens, repoTopicSet) < PAPER_REPO_MIN_JACCARD) continue;
 
       // "Already being done?" — does github data show recent commits / PRs
       // mentioning any of the same keywords?
@@ -563,53 +574,11 @@ function sourceRepoGapXExpertise({ github, repos, expertise, teammates, aspirati
       });
     }
 
-    // Stale-TODO candidates: top N oldest TODOs whose text overlaps expertise.
-    const staleTodos = Array.isArray(gaps.stale_todos) ? gaps.stale_todos.slice() : [];
-    staleTodos.sort((a, b) => (b.age_days || 0) - (a.age_days || 0));
-    let usedTodos = 0;
-    for (const todo of staleTodos) {
-      if (usedTodos >= TOP_STALE_TODOS_USED) break;
-      const todoTokens = tokenSet([todo.text || '', todo.file || '']);
-      const combined = new Set([...todoTokens, ...repoTopicSet]);
-      const matchesExpertise =
-        expertiseTokens.size === 0 || anyTokenOverlap(combined, expertiseTokens);
-      if (!matchesExpertise) continue;
-
-      const aspirationMatch = computeAspirationMatch(combined, aspirations);
-      const primaryKeyword = (todo.file || 'todo').toLowerCase();
-      candidates.push({
-        _internal: {
-          keywords: combined,
-          primary_keyword: primaryKeyword,
-          repo_or_paper_id: `${repoName}::todo::${todo.file}:${todo.line}`,
-        },
-        source: 'repo_gap_x_expertise',
-        one_line: `Clear stale TODO in ${repoName}/${todo.file} — ${truncate(todo.text, 70)}`,
-        why_gap: [
-          `repo ${repoName}: TODO at ${todo.file}:${todo.line} is ${todo.age_days}d old`,
-          `overlaps your expertise/topic keywords`,
-        ],
-        collaborator_candidates: suggestCollaborators(combined, teammates),
-        first_step: `Open a scoped PR that either resolves the TODO or converts it into a tracked issue with owner`,
-        artifact_target: `Merged PR resolving ${todo.file}:${todo.line}`,
-        evidence: {
-          repo: repoName,
-          file: todo.file,
-          line: todo.line,
-          age_days: todo.age_days,
-          text: todo.text,
-        },
-        scoring_inputs: {
-          novelty: 0.3,
-          visibility: 0.5,
-          team_fit: 0.5,
-          feasibility: 0.7,
-          urgency: 0.5,
-          aspiration_match: Number(aspirationMatch.toFixed(2)),
-        },
-      });
-      usedTodos++;
-    }
+    // Stale-TODO candidates intentionally NOT generated as Propose items.
+    // Per SKILL.md Quality Bar: "Stale TODO cleanup (single-line resolutions).
+    // They're noise." A propose-lane item should be a scoped project, not a
+    // janitorial line edit. Repo-level TODO debt remains visible in
+    // gaps.stale_todos for ad-hoc inspection.
   }
   return candidates;
 }

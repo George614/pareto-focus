@@ -365,70 +365,17 @@ function buildDoCandidates({ github, goalsKeywords, recencyHalfLife }) {
       }));
     }
 
-    // Stale TODOs — only the oldest 3 per repo; a "Do"-lane item means clear it.
-    // Inversion fix: stale TODOs should rank HIGHER as they age, not lower.
-    // Replace recency_decay with staleness = min(1.0, ageDays/30) so a 30+d TODO
-    // is maximally stale, bump execution_leverage (small unblocker), and raise
-    // urgency proportional to staleness. Keep recency_decay field name for JSON
-    // compatibility — it now stores staleness for this source only.
-    const todos = (gaps.stale_todos || []).slice().sort((a, b) => (b.age_days || 0) - (a.age_days || 0)).slice(0, 3);
-    for (const todo of todos) {
-      const text = todo.text || '';
-      const ageDays = Number(todo.age_days) || 0;
-      const kws = tokenSet([text, todo.file || '', repoName]);
-      const todoItem = scoreExec({
-        source: 'github_stale_todo',
-        title: `[${repoName}] Clear TODO ${todo.file}:${todo.line}`,
-        repo: repoName,
-        ageDays,
-        text,
-        labels: ['todo'],
-        keywords: kws,
-        goalsKeywords,
-        recencyHalfLife,
-        evidence: [
-          `repo: ${repoName}`,
-          `${todo.file}:${todo.line}`,
-          `${ageDays}d old`,
-          truncate(text, 80),
-        ],
-      });
-      const staleness = Math.min(1.0, ageDays / 30);
-      todoItem._components.recency_decay = Number(staleness.toFixed(3));
-      todoItem._components.execution_leverage = 0.5;
-      todoItem._components.urgency = Number(Math.min(0.9, 0.3 + staleness * 0.5).toFixed(3));
-      // Cap stale-TODO contribution so they're competitive with (not dominant
-      // over) active in-flight work. Adds a tiny age-based epsilon so older
-      // TODOs outrank younger ones at the same staleness=1.0 ceiling.
-      todoItem._score_multiplier = 0.25 + Math.min(ageDays, 365) / 10000;
-      out.push(todoItem);
-    }
+    // Stale TODOs intentionally NOT surfaced as Do/Push items.
+    // Per SKILL.md Quality Bar: "Stale TODO cleanup (single-line resolutions).
+    // They're noise." Single-line TODO janitorial work is chore-tier and
+    // crowds out real in-flight execution work. Repo-level TODO debt is still
+    // visible via the github_stale_todo gap data for ad-hoc inspection.
 
-    // High-commit-activity repos with no PR/issue surfacing → nudge to ship a
-    // cohesive artifact from those commits (continuation signal).
-    const commits7d = Number(local.commits_last_7d) || 0;
-    const hasOtherItems = (gaps.stale_open_prs || []).length > 0
-      || (gaps.untriaged_issues || []).length > 0;
-    if (commits7d >= 3 && !hasOtherItems) {
-      const subjects = (local.recent_commits || []).slice(0, 3).map((c) => c.subject || '').filter(Boolean);
-      const kws = tokenSet([...subjects, repoName]);
-      out.push(scoreExec({
-        source: 'github_active_repo',
-        title: `[${repoName}] Ship in-flight work — ${commits7d} commits in last 7 days`,
-        repo: repoName,
-        ageDays: 2,
-        text: subjects.join(' | '),
-        labels: [],
-        keywords: kws,
-        goalsKeywords,
-        recencyHalfLife,
-        evidence: [
-          `repo: ${repoName}`,
-          `commits_last_7d: ${commits7d}`,
-          ...subjects.slice(0, 2).map((s) => `commit: ${truncate(s, 60)}`),
-        ],
-      }));
-    }
+    // The "Ship in-flight work — N commits in last 7 days" continuation source
+    // was removed. Per SKILL.md Quality Bar: whole-repo commit rollups conflate
+    // teammates' work with the user's; "ship existing feature" is vague chore-tier
+    // and not a deliverable. A Do item must reference a SPECIFIC PR/issue/branch
+    // the user authored.
   }
 
   return out;
