@@ -115,10 +115,12 @@ function loadConfig() {
       try {
         const parsed = JSON.parse(py.stdout);
         const userEmails = Array.isArray(parsed?.user?.emails) ? parsed.user.emails : [];
+        const userHandle = (parsed?.user?.github_handle || '').toString().trim();
         return {
           projects_root: parsed.projects_root || path.join(HOME, 'Projects'),
           active_repos: Array.isArray(parsed.active_repos) ? parsed.active_repos : [],
           user_emails: userEmails,
+          user_handle: userHandle,
           _source: configPath,
         };
       } catch (_) {
@@ -160,11 +162,13 @@ function loadConfig() {
   const userEmails = emailsLine
     ? emailsLine.split(',').map((s) => s.replace(/["']/g, '').trim()).filter(Boolean)
     : [];
+  const userHandle = ((raw.match(/^\s*github_handle:\s*"?([^"\s\n]+)"?/m) || [])[1] || '').trim();
 
   return {
     projects_root: projectsRoot,
     active_repos: repos,
     user_emails: userEmails,
+    user_handle: userHandle,
     _source: configPath,
   };
 }
@@ -666,12 +670,31 @@ function main() {
   const ghState = ghAvailable();
   const repos = {};
 
+  const userHandle = (cfg.user_handle || '').toLowerCase();
   for (const repoDef of cfg.active_repos) {
     try {
       // Inject user emails so processRepo → collectLocalCommits can filter
       // commits to only the user's work (not whole-repo activity).
       repoDef._user_emails = cfg.user_emails || [];
-      repos[repoDef.name] = processRepo(repoDef, cfg.projects_root, ghState);
+      const entry = processRepo(repoDef, cfg.projects_root, ghState);
+      // Per SKILL.md Quality Bar: surface ONLY items the user owns. PRs/issues
+      // authored by teammates aren't the user's "Do" work — drop them at ingest
+      // so no downstream source can leak them into the Do/Push lanes.
+      if (entry && entry.gaps && userHandle) {
+        if (Array.isArray(entry.gaps.stale_open_prs)) {
+          entry.gaps.stale_open_prs = entry.gaps.stale_open_prs.filter(
+            (pr) => pr && pr.author && String(pr.author).toLowerCase() === userHandle,
+          );
+        }
+        if (Array.isArray(entry.gaps.untriaged_issues)) {
+          entry.gaps.untriaged_issues = entry.gaps.untriaged_issues.filter(
+            (iss) => iss && iss.author && String(iss.author).toLowerCase() === userHandle,
+          );
+        }
+      }
+      repos[repoDef.name] = entry;
+      // Skip the legacy assignment below; we already set repos[name] above.
+      continue;
     } catch (err) {
       repos[repoDef.name] = {
         local: null,

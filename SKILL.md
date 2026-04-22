@@ -105,6 +105,24 @@ The user works on RL post-training, evals, and Writer Agent integration. Their h
 3. *What's the first concrete week?* (not "share in channel" — an actual deliverable)
 4. *Who is the natural collaborator?* (from teammates.md, with a reason)
 
+## Fallback: active research when filters return nothing
+
+If after the scripted pipeline (`detect_opportunities.js` → `score_and_rank.js`) **any lane is empty** (do=0 OR push=0 OR propose=0), DO NOT show the empty-state placeholders. Instead, switch to active research mode. Strict filters protect the user from chore-tier noise — they don't excuse you from producing a useful briefing.
+
+**Active research procedure (run when any lane is empty):**
+
+1. **Teammates' work** (the user's leverage points): read `data/signals/<today>/github.json`, look at `repos[*].local.recent_commits` (NOT `recent_commits_by_user` — you want teammates' work too) and `repos[*].gaps.stale_open_prs` (the unfiltered list, BEFORE the user-author filter). Identify what teammates shipped this week. The user's "Do" lane can include "review/unblock teammate X's PR" if it's a critical dependency, "pair on Y" if it advances shared goals, or "extend their work with Z" — but ONLY if you can name a specific concrete next step.
+
+2. **Industry/academic trends**: read `data/signals/<today>/papers.json` (top arxiv hits matching `industry_topics.papers`). Cross-reference each paper's title/topic against `state/expertise.md::known_for` and `state/goals.md::leadership_aspirations`. For papers that genuinely overlap, synthesize a Propose item: what specific experiment/RFC/eval would the user run to bring this technique into the team's work?
+
+3. **Web research** (if papers.json is thin or stale): use `exa-search` or `WebSearch` to pull 3–5 fresh items from the user's `industry_topics.papers` queries. Focus on results published in the last 30 days that match the user's research focus (RL post-training, agentic RL, long-context, eval).
+
+4. **Synthesize** 3–5 mixed Propose items (2–3 ambitious + 2–3 practical, per the existing rule) that combine teammates' active work + industry signals + the user's expertise. Cite sources concretely (commit SHA, PR #, arxiv ID, blog URL). NEVER fabricate signals — if a source doesn't actually contain a candidate, say so.
+
+5. **Output format**: present the synthesized briefing in the same Do/Push/Propose lane structure. Mark synthesized items with `(research-synth)` so the user can distinguish them from script-generated items.
+
+**Do not show empty placeholders like "_No items surfaced. Check signals freshness._"** — they're a sign the research step was skipped.
+
 ## Sub-commands
 
 | Command | Behavior |

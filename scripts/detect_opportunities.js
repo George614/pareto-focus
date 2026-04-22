@@ -522,64 +522,14 @@ function sourceRepoGapXExpertise({ github, repos, expertise, teammates, aspirati
   const reposByName = {};
   for (const r of repos) reposByName[r.name] = r;
 
-  for (const [repoName, repoData] of Object.entries(github.repos)) {
-    const gaps = (repoData && repoData.gaps) || {};
-    const repoCfg = reposByName[repoName] || { name: repoName, topics: [] };
-    const repoTopicSet = tokenSet(repoCfg.topics || []);
-
-    // Missing-docs candidates
-    for (const missing of gaps.missing_docs || []) {
-      const docTokens = tokenSet([missing, repoName, ...(repoCfg.topics || [])]);
-      const matchesExpertise =
-        expertiseTokens.size === 0 || anyTokenOverlap(docTokens, expertiseTokens);
-      if (!matchesExpertise) continue;
-
-      const candidateKeywords = new Set([...docTokens, ...repoTopicSet]);
-      const aspirationMatch = computeAspirationMatch(candidateKeywords, aspirations);
-      const primaryKeyword = missing.toLowerCase();
-
-      candidates.push({
-        _internal: {
-          keywords: candidateKeywords,
-          primary_keyword: primaryKeyword,
-          repo_or_paper_id: `${repoName}::doc::${missing}`,
-        },
-        source: 'repo_gap_x_expertise',
-        one_line: `Own the ${missing} for ${repoName} — it's missing and you're the right person to write it`,
-        why_gap: [
-          `repo ${repoName}: ${missing} not present`,
-          repoCfg.topics && repoCfg.topics.length
-            ? `repo topics align with your expertise: ${repoCfg.topics.join(', ')}`
-            : `no curated topics — treat as generic doc ownership`,
-        ],
-        collaborator_candidates: suggestCollaborators(candidateKeywords, teammates),
-        first_step: `Draft a ${missing} outline (purpose, module map, key decisions) in a PR against ${repoName}`,
-        artifact_target: `${missing} merged in ${repoName}`,
-        evidence: {
-          repo: repoName,
-          missing_doc: missing,
-          repo_topics: repoCfg.topics || [],
-        },
-        scoring_inputs: {
-          // Missing-doc gaps are maintenance chores, not leadership artifacts.
-          // Keep them scoreable so they surface when NOTHING else exists, but
-          // never let them outrank paper×repo or real proposal opportunities.
-          novelty: 0.15,
-          visibility: 0.25,
-          team_fit: 0.3,
-          feasibility: 0.8,
-          urgency: 0.2,
-          aspiration_match: Number(aspirationMatch.toFixed(2)),
-        },
-      });
-    }
-
-    // Stale-TODO candidates intentionally NOT generated as Propose items.
-    // Per SKILL.md Quality Bar: "Stale TODO cleanup (single-line resolutions).
-    // They're noise." A propose-lane item should be a scoped project, not a
-    // janitorial line edit. Repo-level TODO debt remains visible in
-    // gaps.stale_todos for ad-hoc inspection.
-  }
+  // Missing-docs and stale-TODO candidates intentionally NOT generated.
+  // Per SKILL.md Quality Bar:
+  //   - "Write ARCHITECTURE.md / README / docs" — chore-tier, banned.
+  //   - "Stale TODO cleanup (single-line resolutions)" — noise, banned.
+  // The repo_gap_x_expertise source is deliberately empty — repo gaps that
+  // are not "code I authored" are not the user's leadership opportunities.
+  // Real Propose items must come from paper×repo (with strict overlap) or
+  // synthesized cross-cutting project pitches, not janitorial repo housekeeping.
   return candidates;
 }
 
